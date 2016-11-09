@@ -292,16 +292,16 @@ void exReg()
          reg[rd] = (unsignedVal1 >> shamt);
          PC += 4;
          break;
-      case 0x03 : 	// sra ***NEED TO TEST
+      case 0x03 : 	// sra
          signedVal1 = (int) reg[rt];
          reg[rd] = (signedVal1 >> shamt);
          PC += 4;
          break;
-      case 0x04 : 	// sllv
+      case 0x04 : 	// sllv **NONE OF VARIABLES WORK
          reg[rd] = (reg[rt] << reg[rs]);
          PC += 4;
          break;
-      case 0x06 : 	// srlv
+      case 0x06 : 	// srlv *WORKS
          reg[rd] = (reg[rt] >> reg[rs]);
          PC += 4;
          break;
