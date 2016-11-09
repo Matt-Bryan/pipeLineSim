@@ -38,7 +38,7 @@ typedef unsigned int MIPS, *MIPS_PTR;
 MB_HDR mb_hdr;		/* Header area */
 static MIPS mem[1024];		/* Room for 4K bytes */
 static unsigned int PC, *nextInstruction, memRef;
-static long reg[32];
+static int reg[32];
 static float clockCount;
 
 
@@ -112,6 +112,9 @@ void decode(int memLoc) {
 		nextInstruction[1] = (instr & RSMASK) >> 21;
 		nextInstruction[2] = (instr & RTMASK) >> 16;
 		nextInstruction[3] = (instr & IMMASK);
+		if (instr & 0x00008000) {
+			nextInstruction[3] |= 0xFFFF0000;
+		}
 	}
 }
 
@@ -151,6 +154,7 @@ void exImm() {
          clockCount += 4;
          break;
       case 0x0D: //or immediate
+         nextInstruction[3] = nextInstruction[3] & 0x0000FFFF;
          reg[nextInstruction[2]] = reg[nextInstruction[1]] | nextInstruction[3];
          clockCount += 4;
          break;
@@ -274,6 +278,8 @@ void exReg()
    unsigned int func = nextInstruction[5];
    int signedVal1 = 0;
    int signedVal2 = 0;
+   unsigned int unsignedVal1 = 0;
+   unsigned int unsignedVal2 = 0;
 
    switch(func) 
    {
@@ -282,7 +288,8 @@ void exReg()
          PC += 4; 
          break;
       case 0x02 : 	// srl
-         reg[rd] = (reg[rt] >> shamt);
+      	 unsignedVal1 = (unsigned int) reg[rt];
+         reg[rd] = (unsignedVal1 >> shamt);
          PC += 4;
          break;
       case 0x03 : 	// sra ***NEED TO TEST
