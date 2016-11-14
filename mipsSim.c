@@ -81,7 +81,7 @@ int loadMemory(char *filename)	//This function acts as step 1 of lab 5, and load
 *  Modifies the nextInstruction buffer with details about the next Instruction
 *  
 *  If it detects a syscall halt, it only puts -1 in first spot of buffer  -MB*/
-void decode(int memLoc) {
+unsigned int *fetch(int memLoc) {
 	unsigned int instr = mem[memLoc/4], opCode;
 	int count;
 
@@ -297,11 +297,11 @@ void exReg()
          reg[rd] = (signedVal1 >> shamt);
          PC += 4;
          break;
-      case 0x04 : 	// sllv **NONE OF VARIABLES WORK
+      case 0x04 : 	// sllv
          reg[rd] = (reg[rt] << reg[rs]);
          PC += 4;
          break;
-      case 0x06 : 	// srlv *WORKS
+      case 0x06 : 	// srlv
          reg[rd] = (reg[rt] >> reg[rs]);
          PC += 4;
          break;
@@ -405,6 +405,11 @@ void displayResult(int numInstr, float clockCount, int memRef) {
 
 int main(int argc, char **argv) {
 	int memp, input = 0, numInstr = 0, exitFlag = 0;
+   int ifOut, ifIn, ifFlag;
+   int idOut, idIn, idFlag;
+   int exOut, exIn, exFlag;
+   int memOut, memIn, memFlag;
+   int wbOut, wbIn, wbFlag;
 
 	nextInstruction = calloc(6, sizeof(int));
 	PC = 0;
@@ -421,7 +426,7 @@ int main(int argc, char **argv) {
 			if (input == 1) {
 				//Single-step
 
-				decode(PC);
+				fetch(PC);
 				if (execute() == -1) {
 					input = -1;
 				}
@@ -432,7 +437,7 @@ int main(int argc, char **argv) {
 				//Running
 
 				while (exitFlag != -1) {
-					decode(PC);
+					fetch(PC);
 					exitFlag = execute();
 					numInstr++;
 				}
