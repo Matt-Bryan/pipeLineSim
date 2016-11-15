@@ -37,7 +37,7 @@ typedef unsigned int MIPS, *MIPS_PTR;
 
 MB_HDR mb_hdr;		/* Header area */
 static MIPS mem[1024];		/* Room for 4K bytes */
-static unsigned int PC, *nextInstruction, memRef;
+static unsigned int PC, *nextInstruction;
 static int reg[32];
 static float clockCount;
 
@@ -203,7 +203,6 @@ void exImm() {
          else if (addr == 3)
             reg[nextInstruction[2]] = ((mem[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & FRBYTEMASK) >> 24;
          clockCount += 5;
-         memRef++;
          break;
       case 0x24: //load byte unsigned
          addr = mem[reg[nextInstruction[1]] + nextInstruction[3]] % 4;
@@ -216,7 +215,6 @@ void exImm() {
          else if (addr == 3)
             reg[nextInstruction[2]] = ((mem[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & FRBYTEMASK) >> 24;
          clockCount += 5;
-         memRef++;
          break;
       case 0x21 || 0x25: //load halfword
          addr = mem[reg[nextInstruction[1]] + nextInstruction[3]] % 4;
@@ -225,18 +223,15 @@ void exImm() {
          else if (addr == 2)
             reg[nextInstruction[2]] = ((mem[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & SHALFMASK) >> 16;
          clockCount += 5;
-         memRef++;
          break;
       case 0x0F: //load upper
       	 reg[nextInstruction[2]] |= (nextInstruction[3] << 16);
          //reg[nextInstruction[2]] = ((mem[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & SHALFMASK) >> 16;
          clockCount += 5;
-         memRef++;
          break;
       case 0x23: //load word
          reg[nextInstruction[2]] = (mem[reg[nextInstruction[1]] + nextInstruction[3]]) / 4;
          clockCount += 5;
-         memRef++;
          break;
       case 0x28: //store byte
          addr = mem[reg[nextInstruction[1]] + nextInstruction[3]] % 4;
@@ -249,7 +244,6 @@ void exImm() {
          else if (addr == 3)
             mem[nextInstruction[2] / 4] = ((reg[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & BYTEMASK) << 24;
          clockCount += 5;
-         memRef++;
          break;
       case 0x29: //store halfword
          addr = mem[reg[nextInstruction[1]] + nextInstruction[3]] % 4;
@@ -258,12 +252,10 @@ void exImm() {
          else if (addr == 2)
             mem[nextInstruction[2] / 4] = ((reg[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & BYTEMASK) << 16;
          clockCount += 5;
-         memRef++;
          break;
       case 0x2B: //store word
          mem[nextInstruction[2] / 4] = (reg[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & BYTEMASK;
          clockCount += 5;
-         memRef++;
          break;
     }
 }
@@ -388,70 +380,43 @@ int execute() {
 	// printf("\n");
 }
 
-/* Displays the number of instructions simulated,
-*  the number of memory references, and the CPI, 
-*  up until this point.
-*
-*  Takes the corresponding details from main as
-*  arguements.    -MB */
-void displayResult(int numInstr, float clockCount, int memRef) {
-	int count = 0;
+void writeBack() {
 
-	for (count; count < 32; count++) {
-		printf("R%d = %08X\n", count, reg[count]);
-	}
-	printf("Number of instructions simulated: %d\nMemory References: %d\nCPI: %.2f\n\n", numInstr, memRef, clockCount / numInstr);
+}
+
+void memRef() {
+
+}
+
+void decode() {
+
+}
+
+void displayResult() {
+	
 }
 
 int main(int argc, char **argv) {
 	int memp, input = 0, numInstr = 0, exitFlag = 0;
-   int ifOut, ifIn, ifFlag;
-   int idOut, idIn, idFlag;
-   int exOut, exIn, exFlag;
-   int memOut, memIn, memFlag;
-   int wbOut, wbIn, wbFlag;
+   int ifOut, ifFlag;
+   int idOut, idFlag;
+   int exOut, exFlag;
+   int memOut, memFlag;
+   int wbFlag;
 
 	nextInstruction = calloc(6, sizeof(int));
 	PC = 0;
 	clockCount = 0.0;
-	memRef = 0;
 
 	memp = loadMemory(argv[1]);
 
 	do {
-		printf("Enter 0 for Run, 1 for Single-Step, or -1 to exit\n");
-
-		if (scanf("%02d", &input) >= 0 && input != -1) {
-
-			if (input == 1) {
-				//Single-step
-
-				fetch(PC);
-				if (execute() == -1) {
-					input = -1;
-				}
-				numInstr++;
-				displayResult(numInstr, clockCount, memRef);
-			}
-			else {
-				//Running
-
-				while (exitFlag != -1) {
-					fetch(PC);
-					exitFlag = execute();
-					numInstr++;
-				}
-				// for (curLoc; curLoc < memp & input > 0; curLoc += 4) {
-				// 	decode(curLoc);
-				// 	if (execute() == -1) {
-				// 		input = -1;
-				// 	}
-				// 	numInstr++;
-				// }
-				displayResult(numInstr, clockCount, memRef);
-			}
-		}
-	} while (input > 0);
+		writeBack();
+		memRef();
+		execute();
+		decode();
+		fetch(PC);
+	} while (exitFlag == 0);
 
 	// for (i = 0; i < memp; i += 4) {
  //       printf("Instruction@%08X : %08X\n", i, mem[i/4]);
