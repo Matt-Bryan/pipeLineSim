@@ -38,6 +38,13 @@
 #define JMP 2
 #define BR 3
 #define LW 4
+#define SW 5
+
+#define HALT -1
+#define CLEAR -2
+
+#define EMPTY 100
+#define BUSY 101
 
 typedef unsigned int MIPS, *MIPS_PTR;
 
@@ -197,17 +204,24 @@ int exReg(int rs, int rt, int shamt, int func)
    return res;
 }
 
-void exBr(int op, int rs, int rt, int brAdd) {
+int exBr(int op, int rs, int rt, int brAdd) {
    switch (op) {
       case 0x04: //branch equal
          if (rs == rt)
+         {
             PC = brAdd;
+            return CLEAR;
+         }
          break;
       case 0x05: //branch not equal
          if (rs != rt)
+         {
             PC = brAdd;
+            return CLEAR;
+         }
          break;
    }
+   return 0;
 }
 
 int exLSW(int rs, int immVal) {
@@ -236,17 +250,35 @@ void exJmp(int op, int jmpAdd) {
    }
 }
 
-void writeBack() {
-
+void writeBack(int *memOut) {
+   reg[memOut[0]] = memOut[1];
 }
 
-void memRef() {
-
+void memRef(int *exOut, int *memOut, int type) 
+{
+   /* memOut format: { rd, MDR } */
+   if (type == LW)
+   {
+       memOut[0] = exOut[0];
+       memOut[1] = mem[(exOut[1]/4)];
+   }
+   else if (type == SW)
+   {
+      memOut[0] = 0;
+      memOut[1] = 0;
+      mem[(exOut[1]/4)] = reg[(exOut[0])];
+   }
+   else
+   {
+      memOut[0] = 0;
+      memOut[1] = 0;
+      reg[exOut[0]] = exOut[1];
+   }
 }
 
 void execute(int *idOut, int *exOut, int type, int *brAddress)
 {
-   int output[] = {0, 0}; /* format: {rd, ALUresult} */
+   /* exOut format: { rd, ALUresult } */
    int result;
 
    /* FORMAT: {op(0), rs(1), rt(2), rd(3), imm(4), shamt(5), jmpIdx(6), func(7)} */
@@ -254,29 +286,31 @@ void execute(int *idOut, int *exOut, int type, int *brAddress)
    {
       case REG:
          result = exReg(idOut[1], idOut[2], idOut[5], idOut[7]);
-         output[0] = idOut[3];
+         exOut[0] = idOut[3];
          break;
       case IMM:
          result = exImm(idOut[1], idOut[0], idOut[4]);
-         output[0] = idOut[2];
+         exOut[0] = idOut[2];
          break;
       case JMP:
-         result = exJmp(idOut[0], idOut[6]);
+         result = CLEAR;
+         exJmp(idOut[0], idOut[6]);
          break;
       case BR:
          result = exBr(idOut[0], idOut[1], idOut[2], *brAddress);
-         output[0] = idOut[2];
          break;
-      case LSW:
+      case LW:
          result = exLSW(idOut[1], idOut[4]);
-         output[0] = idOut[2];
+         exOut[0] = idOut[2];
+         break;
+      case SW:
+         result = exLSW(idOut[1], idOut[4]);
+         exOut[0] = idOut[2];
          break;
    }
 
    /* NEED TO DO: READY ARRAY FOR OUTPUT */
-   output[1] = result;
-
-   exOut = output;
+   exOut[1] = result;
 }
 
 void decode(int *ifOut, int *idOut, int *type, int *brAddress) {
@@ -287,9 +321,9 @@ void decode(int *ifOut, int *idOut, int *type, int *brAddress) {
    int func = (*ifOut & FNMASK);
    int jmpIdx = (*ifOut & JIMASK) << 2;
 
-   *rs = (*ifOut & RSMASK) >> 21;
-   *rt = (*ifOut & RTMASK) >> 16;
-   *rd = (*ifOut & RDMASK) >> 11;
+   int rs = (*ifOut & RSMASK) >> 21;
+   int rt = (*ifOut & RTMASK) >> 16;
+   int rd = (*ifOut & RDMASK) >> 11;
  
    if ((*ifOut & 0x00008000)) /* check the sign bit */
    {
@@ -317,6 +351,9 @@ void decode(int *ifOut, int *idOut, int *type, int *brAddress) {
       case 0x23:
          *type = LW;
          break;
+      case 0x2B:
+         *type = SW;
+         break;
       default:
          *type = IMM;
          break;
@@ -325,17 +362,15 @@ void decode(int *ifOut, int *idOut, int *type, int *brAddress) {
    /* ALUOut gets branch eff address */
    *brAddress = PC + (imm << 2);
 
-   /* set idOut to the output array; format: [op, rs, rt, rd, imm, shamt, jmpIdx, func] */
-   output[0] = op;
-   output[1] = *rs;
-   output[2] = *rt;
-   output[3] = *rd;
-   output[4] = imm;
-   output[5] = shamt;
-   output[6] = jmpIdx;
-   output[7] = func;
-
-   idOut = output; 
+   /* set idOut to the output array; format: { op, rs, rt, rd, imm, shamt, jmpIdx, func } */
+   idOut[0] = op;
+   idOut[1] = rs;
+   idOut[2] = rt;
+   idOut[3] = rd;
+   idOut[4] = imm;
+   idOut[5] = shamt;
+   idOut[6] = jmpIdx;
+   idOut[7] = func;
 }
 
 void fetch(int *ifOut)
@@ -345,35 +380,46 @@ void fetch(int *ifOut)
 }
 
 void displayResult() {
-	
+   int count = 0;
+   
+   for (count; count < 32; count++)
+   {
+      printf("R%d = %08X\n", count, reg[count]);
+   }
+   
 }
 
 int main(int argc, char **argv) {
 	int memp, input = 0, numInstr = 0, exitFlag = 0;
-   int ifOut, ifFlag;
-   int idOut, idFlag;
-   int exOut, exFlag;
-   int memOut, memFlag;
-   int wbFlag;
+   int ifOut = 0; /* 64 bit instruction */
+   int idOut[] = {0, 0, 0, 0, 0, 0, 0, 0}; /* format: { op, rs, rt, rd, imm, shamt, jmpIdx, func } */
+   int exOut[] = {0, 0}; /* format: { rd, ALUResult } */
+   int memOut[] = {0, 0}; /* format: {} */
+   int ifFlag, idFlag, exFlag, memFlag, wbFlag;
    int type, brAddress;
 
-	nextInstruction = calloc(6, sizeof(int));
 	PC = 0;
 	clockCount = 0.0;
 
 	memp = loadMemory(argv[1]);
 
 	do {
-		writeBack();
-		memRef();
-		execute(&idOut, &exOut, type, &brAddress);
-		decode(&ifOut, &idOut, &type, &brAddress);
+ 		writeBack(memOut);
+		memRef(exOut, memOut, type);
+		execute(idOut, exOut, type, &brAddress);
+                if (exOut[1] == CLEAR)
+                {
+                   /* Clearing involves flushing in/outboxes and setting idFlag to busy */
+                   ifOut = 0;
+                   idFlag = EMPTY;
+                }
+		decode(&ifOut, idOut, &type, &brAddress);
 		fetch(&ifOut);
 	} while (exitFlag == 0);
 
 	// for (i = 0; i < memp; i += 4) {
  //       printf("Instruction@%08X : %08X\n", i, mem[i/4]);
  //    }
-
+    displayResult();
 	return 0;
 }
