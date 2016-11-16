@@ -210,9 +210,8 @@ void exBr(int op, int rs, int rt, int brAdd) {
    }
 }
 
-int exLw(int rs, int immVal) {
+int exLSW(int rs, int immVal) {
    int res;
-   
    res = rs + immVal;
    return res;
 }
