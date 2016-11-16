@@ -96,28 +96,31 @@ int exImm(int rs, int op, int immVal) {
    
    switch (op) { //switching on the op code
       case 0x08: //add immediate
-         res = rs + immVal;
+         res = reg[rs] + immVal;
          break;
       case 0x09: //add immediate unsigned
-         res = (unsigned int)rs + (unsigned int)immVal;
+         res = (unsigned int)reg[rs] + (unsigned int)immVal;
          break;
       case 0x0C: //and immediate
-         res = rs & immVal;
+         res = reg[rs] & immVal;
          break;
       case 0x0D: //or immediate
-         res = rs | immVal;
+         res = reg[rs] | immVal;
          break;
       case 0x0E: //xor immediate
-         res = rs ^ immVal;
+         res = reg[rs] ^ immVal;
          break;
       case 0x0A: //set less than signed
-         rs = rs < immVal;
+         rs = reg[rs] < immVal;
          break;
       case 0x0B: //set less than unsigned
-         res = (unsigned int)rs < (unsigned int)immVal;
+         res = (unsigned int)reg[rs] < (unsigned int)immVal;
          break;
       case 0x2B: //store word
-         res = rs + immVal;
+         res = reg[rs] + immVal;
+         break;
+      case 0x0F: //lui
+         res = reg[rs] << 16;
          break;
     }
    
@@ -136,68 +139,68 @@ int exReg(int rs, int rt, int shamt, int func)
    switch(func) 
    {
       case 0x00 : 	// sll
-         res = rt << shamt;
+         res = reg[rt] << shamt;
          break;
       case 0x02 : 	// srl
-      	 unsignedVal1 = (unsigned int) rt;
+      	 unsignedVal1 = (unsigned int) reg[rt];
          res = unsignedVal1 >> shamt;
          break;
       case 0x03 : 	// sra
-         signedVal1 = (int) rt;
+         signedVal1 = (int) reg[rt];
          res = signedVal1 >> shamt;
          break;
       case 0x04 : 	// sllv
-         res = rt << rs;
+         res = reg[rt] << rs;
          break;
       case 0x06 : 	// srlv
-         res = rt >> rs;
+         res = reg[rt] >> rs;
          break;
       case 0x07 : 	// srav
-         signedVal1 = (int) rt;
-         res = signedVal1 >> rs;
+         signedVal1 = (int) reg[rt];
+         res = signedVal1 >> reg[rs];
          break;
       case 0x20 : 	// add
-         signedVal1 = rs;
-         signedVal2 = rt;
+         signedVal1 = reg[rs];
+         signedVal2 = reg[rt];
          res = signedVal1 + signedVal2;
          break;
       case 0x21 : 	// addu
-         res = (unsigned int)rs + (unsigned int)rt;
+         res = (unsigned int)reg[rs] + (unsigned int)reg[rt];
          break;
       case 0x22 : 	// sub
-         signedVal1 = rs;
-         signedVal2 = rt;
+         signedVal1 = reg[rs];
+         signedVal2 = reg[rt];
          res = signedVal1 - signedVal2;
          break;
       case 0x23 : 	// subu
-         res = (unsigned int)rs - (unsigned int)rt;
+         res = (unsigned int)reg[rs] - (unsigned int)reg[rt];
          break;
       case 0x24 : 	// and
-         res = rs & rt;
+         res = reg[rs] & reg[rt];
          break;
       case 0x25 : 	// or
-         res = rs | rt;
+         res = reg[rs] | reg[rt];
          break;
       case 0x26 : 	// Xor
-         res = rs ^ rt;
+         res = reg[rs] ^ reg[rt];
          break;
       case 0x27 : 	// Nor
-         res = ~(rs | rt);
+         res = ~(reg[rs] | reg[rt]);
          break;
       case 0x2A : 	// slt
-         signedVal1 = (int) rs;
-         signedVal2 = (int) rt;
+         signedVal1 = (int) reg[rs];
+         signedVal2 = (int) reg[rt];
          res = (signedVal1 < signedVal2);
          break;
       case 0x2B : 	// sltu
-         res = (unsigned int)rs < (unsigned int)rt;
+         res = (unsigned int)rs < (unsigned int)reg[rt];
          break;
       case 0x08 : 	// jr
-         PC = rs;
+         PC = reg[rs];
          break;
       case 0x09 : 	// jalr
-         reg[31] = PC + 4;
-         PC = rs;
+         reg[31] = PC;
+         PC = reg[rs];
          break;
    }
    
@@ -226,7 +229,7 @@ int exBr(int op, int rs, int rt, int brAdd) {
 
 int exLSW(int rs, int immVal) {
    int res;
-   res = rs + immVal;
+   res = reg[rs] + immVal;
    return res;
 }
 
@@ -252,6 +255,7 @@ void exJmp(int op, int jmpAdd) {
 
 void writeBack(int *memOut) {
    reg[memOut[0]] = memOut[1];
+   clockCOunt++;
 }
 
 void memRef(int *exOut, int *memOut, int type) 
@@ -274,6 +278,7 @@ void memRef(int *exOut, int *memOut, int type)
       memOut[1] = 0;
       reg[exOut[0]] = exOut[1];
    }
+   clockCount++;
 }
 
 void execute(int *idOut, int *exOut, int type, int *brAddress)
@@ -284,6 +289,10 @@ void execute(int *idOut, int *exOut, int type, int *brAddress)
    /* FORMAT: {op(0), rs(1), rt(2), rd(3), imm(4), shamt(5), jmpIdx(6), func(7)} */
    switch(type)
    {
+      case HALT:
+         result = HALT;
+         exOut[0] = HALT;
+         break;
       case REG:
          result = exReg(idOut[1], idOut[2], idOut[5], idOut[7]);
          exOut[0] = idOut[3];
@@ -311,6 +320,7 @@ void execute(int *idOut, int *exOut, int type, int *brAddress)
 
    /* NEED TO DO: READY ARRAY FOR OUTPUT */
    exOut[1] = result;
+   clockCount++;
 }
 
 void decode(int *ifOut, int *idOut, int *type, int *brAddress) {
@@ -334,7 +344,10 @@ void decode(int *ifOut, int *idOut, int *type, int *brAddress) {
    switch (op)
    {
       case 0x0:
-         *type = REG;
+         if (func == 0xC)
+            *type = HALT;
+         else
+            *type = REG;
          break;
       case 0x2:
          *type = JMP;
@@ -371,12 +384,15 @@ void decode(int *ifOut, int *idOut, int *type, int *brAddress) {
    idOut[5] = shamt;
    idOut[6] = jmpIdx;
    idOut[7] = func;
+   
+   clockCount++;
 }
 
 void fetch(int *ifOut)
 {
    *ifOut = mem[PC/4];
    PC = PC + 4;
+   clockCOunt++;
 }
 
 void displayResult() {
