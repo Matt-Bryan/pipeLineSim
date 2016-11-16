@@ -280,7 +280,7 @@ void execute(int *idOut, int *exOut, int type, int *brAddress)
 }
 
 void decode(int *ifOut, int *idOut, int *type, int *brAddress) {
-   int output[] = {0, 0, 0, 0, 0, 0, 0, 0}; /* format: {op, rs, rt, rd, imm, shamt, jmpIdx, func}
+   int output[] = {0, 0, 0, 0, 0, 0, 0, 0}; /* format: {op, rs, rt, rd, imm, shamt, jmpIdx, func} */
    int op = (*ifOut & OPMASK) >> 26;
    int imm = (*ifOut & IMMASK);
    int shamt = (*ifOut & SHMASK) >> 6;
