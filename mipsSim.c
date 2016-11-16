@@ -337,15 +337,53 @@ void memRef() {
 
 }
 
-void execute(int *idOut, int *exOut, int *type, int *A, int *B, int *ALUOut)
+void execute(int *idOut, int *exOut, int type, int *brAddress)
 {
-   
+   int output[] = {0, 0}; /* format: {rd, ALUresult} */
+   int result;
+
+   /* FORMAT: {op(0), rs(1), rt(2), rd(3), imm(4), shamt(5), jmpIdx(6), func(7)} */
+   switch(type)
+   {
+      case REG:
+         result = exReg(idOut[1], idOut[2], idOut[5], idOut[7]);
+         output[0] = idOut[3];
+         break;
+      case IMM:
+         result = exImm(idOut[1], idOut[0], idOut[4]);
+         output[0] = idOut[2];
+         break;
+      case JMP:
+         result = exJmp(idOut[0], idOut[6]);
+         break;
+      case BR:
+         result = exBr(idOut[0], idOut[1], idOut[2], *brAddress);
+         output[0] = idOut[2];
+         break;
+      case LSW:
+         result = exLSW(idOut[1], idOut[4]);
+         output[0] = idOut[2];
+         break;
+   }
+
+   /* NEED TO DO: READY ARRAY FOR OUTPUT */
+   output[1] = result;
+
+   exOut = output;
 }
 
-void decode(int *ifOut, int *idOut, int *type, int *A, int *B, int *ALUOut) {
+void decode(int *ifOut, int *idOut, int *type, int *brAddress) {
+   int output[] = {0, 0, 0, 0, 0, 0, 0, 0}; /* format: {op, rs, rt, rd, imm, shamt, jmpIdx, func}
+   int op = (*ifOut & OPMASK) >> 26;
    int imm = (*ifOut & IMMASK);
-   int op = (*ifOut & OPMASK);
+   int shamt = (*ifOut & SHMASK) >> 6;
+   int func = (*ifOut & FNMASK);
+   int jmpIdx = (*ifOut & JIMASK) << 2;
 
+   *rs = (*ifOut & RSMASK) >> 21;
+   *rt = (*ifOut & RTMASK) >> 16;
+   *rd = (*ifOut & RDMASK) >> 11;
+ 
    if ((*ifOut & 0x00008000)) /* check the sign bit */
    {
       imm |= 0xFFFF0000;
@@ -377,11 +415,20 @@ void decode(int *ifOut, int *idOut, int *type, int *A, int *B, int *ALUOut) {
          break;
    }
 
-   *A = (*ifOut & RSMASK);
-   *B = (*ifOut & RTMASK);
-
    /* ALUOut gets branch eff address */
-   *ALUOut = PC + (imm << 2); 
+   *brAddress = PC + (imm << 2);
+
+   /* set idOut to the output array; format: [op, rs, rt, rd, imm, shamt, jmpIdx, func] */
+   output[0] = op;
+   output[1] = *rs;
+   output[2] = *rt;
+   output[3] = *rd;
+   output[4] = imm;
+   output[5] = shamt;
+   output[6] = jmpIdx;
+   output[7] = func;
+
+   idOut = output; 
 }
 
 void fetch(int *ifOut)
@@ -401,7 +448,7 @@ int main(int argc, char **argv) {
    int exOut, exFlag;
    int memOut, memFlag;
    int wbFlag;
-   int type, A, B, ALUOut;
+   int type, brAddress;
 
 	nextInstruction = calloc(6, sizeof(int));
 	PC = 0;
@@ -412,8 +459,8 @@ int main(int argc, char **argv) {
 	do {
 		writeBack();
 		memRef();
-		execute(&idOut, &exOut, &type, &A, &B, &ALUOut);
-		decode(&ifOut, &idOut, &type, &A, &B, &ALUOut);
+		execute(&idOut, &exOut, type, &brAddress);
+		decode(&ifOut, &idOut, &type, &brAddress);
 		fetch(&ifOut);
 	} while (exitFlag == 0);
 
