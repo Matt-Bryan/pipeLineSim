@@ -43,7 +43,7 @@ typedef unsigned int MIPS, *MIPS_PTR;
 
 MB_HDR mb_hdr;		/* Header area */
 static MIPS mem[1024];		/* Room for 4K bytes */
-static unsigned int PC, *nextInstruction;
+static unsigned int PC;
 static int reg[32];
 static float clockCount;
 
@@ -375,6 +375,5 @@ int main(int argc, char **argv) {
  //       printf("Instruction@%08X : %08X\n", i, mem[i/4]);
  //    }
 
-	free(nextInstruction);
 	return 0;
 }
