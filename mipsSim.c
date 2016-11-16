@@ -82,251 +82,159 @@ int loadMemory(char *filename)	//This function acts as step 1 of lab 5, and load
   return memp;
   }
 
-/* Takes the location in memory of the next instruction as an argument.
-*  
-*  Modifies the nextInstruction buffer with details about the next Instruction
-*  
-*  If it detects a syscall halt, it only puts -1 in first spot of buffer  -MB*/
-
-void exJump() {
-	if (nextInstruction[0] == 0x02) {
-		//J
-
-		PC = (PC & 0xF0000000) | (nextInstruction[1] << 2);
-		clockCount += 3;
-	}
-	else {
-		//Jal
-
-		reg[31] = PC + 4;
-		PC = (PC & 0xF0000000) | (nextInstruction[1] << 2);
-		clockCount += 3;
-	}
-}
 
 /*Function that handles I type instructions */
-void exImm() {
-   unsigned int addr;
-   int signedVal;
-   PC += 4;
+int exImm(int rs, int op, int immVal) {
+   int res;
    
-   switch (nextInstruction[0]) { //switching on the op code
+   switch (op) { //switching on the op code
       case 0x08: //add immediate
-         reg[nextInstruction[2]] = (int) reg[nextInstruction[1]] + (int) nextInstruction[3];
-         clockCount += 4;
+         res = rs + immVal;
          break;
       case 0x09: //add immediate unsigned
-         reg[nextInstruction[2]] = reg[nextInstruction[1]] + nextInstruction[3];
-         clockCount += 4;
+         res = (unsigned int)rs + (unsigned int)immVal;
          break;
       case 0x0C: //and immediate
-         reg[nextInstruction[2]] = reg[nextInstruction[1]] & nextInstruction[3];
-         clockCount += 4;
+         res = rs & immVal;
          break;
       case 0x0D: //or immediate
-         nextInstruction[3] = nextInstruction[3] & 0x0000FFFF;
-         reg[nextInstruction[2]] = reg[nextInstruction[1]] | nextInstruction[3];
-         clockCount += 4;
+         res = rs | immVal;
          break;
       case 0x0E: //xor immediate
-         reg[nextInstruction[2]] = reg[nextInstruction[1]] ^ nextInstruction[3];
-         clockCount += 4;
+         res = rs ^ immVal;
          break;
       case 0x0A: //set less than signed
-         reg[nextInstruction[2]] = (int) reg[nextInstruction[1]] < (int) nextInstruction[3] ? 1 : 0;
-         clockCount += 4;
+         rs = rs < immVal;
          break;
       case 0x0B: //set less than unsigned
-         reg[nextInstruction[2]] = reg[nextInstruction[1]] < nextInstruction[3] ? 1 : 0;
-         clockCount += 4;
-         break;
-      case 0x04: //branch equal
-         if (reg[nextInstruction[2]] == reg[nextInstruction[1]]) {
-         	signedVal = (int) nextInstruction[3];
-         	if (nextInstruction[3] & 0x00008000) {
-         		signedVal |= 0xFFFF0000;
-         	}
-         	//printf("NI: %08X, PC: %d", signedVal, PC);
-            PC = PC + (signedVal * 4);
-         }
-         clockCount += 3;
-         break;
-      case 0x05: //branch not equal
-         if (reg[nextInstruction[2]] != reg[nextInstruction[1]]) {
-         	signedVal = (int) nextInstruction[3];
-         	if (nextInstruction[3] & 0x00008000) {
-         		signedVal |= 0xFFFF0000;
-         	}
-         	//printf("NI: %08X, PC: %d", signedVal, PC);
-            PC = PC + (signedVal * 4);
-         }
-         clockCount += 3;
-         break;
-      case 0x20: //load byte
-         addr = mem[reg[nextInstruction[1]] + nextInstruction[3]] % 4;
-         if (addr == 0)
-            reg[nextInstruction[2]] = (mem[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & BYTEMASK;
-         else if (addr == 1)
-            reg[nextInstruction[2]] = ((mem[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & SBYTEMASK) >> 8;
-         else if (addr == 2)
-            reg[nextInstruction[2]] = ((mem[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & TBYTEMASK) >> 16;
-         else if (addr == 3)
-            reg[nextInstruction[2]] = ((mem[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & FRBYTEMASK) >> 24;
-         clockCount += 5;
-         break;
-      case 0x24: //load byte unsigned
-         addr = mem[reg[nextInstruction[1]] + nextInstruction[3]] % 4;
-         if (addr == 0)
-            reg[nextInstruction[2]] = (mem[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & BYTEMASK;
-         else if (addr == 1)
-            reg[nextInstruction[2]] = ((mem[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & SBYTEMASK) >> 8;
-         else if (addr == 2)
-            reg[nextInstruction[2]] = ((mem[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & TBYTEMASK) >> 16;
-         else if (addr == 3)
-            reg[nextInstruction[2]] = ((mem[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & FRBYTEMASK) >> 24;
-         clockCount += 5;
-         break;
-      case 0x21 || 0x25: //load halfword
-         addr = mem[reg[nextInstruction[1]] + nextInstruction[3]] % 4;
-         if (addr == 0)
-            reg[nextInstruction[2]] = ((mem[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & HALFMASK);
-         else if (addr == 2)
-            reg[nextInstruction[2]] = ((mem[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & SHALFMASK) >> 16;
-         clockCount += 5;
-         break;
-      case 0x0F: //load upper
-      	 reg[nextInstruction[2]] |= (nextInstruction[3] << 16);
-         //reg[nextInstruction[2]] = ((mem[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & SHALFMASK) >> 16;
-         clockCount += 5;
-         break;
-      case 0x23: //load word
-         reg[nextInstruction[2]] = (mem[reg[nextInstruction[1]] + nextInstruction[3]]) / 4;
-         clockCount += 5;
-         break;
-      case 0x28: //store byte
-         addr = mem[reg[nextInstruction[1]] + nextInstruction[3]] % 4;
-         if (addr == 0)
-            mem[nextInstruction[2] / 4] = (reg[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & BYTEMASK;
-         else if (addr == 1)
-            mem[nextInstruction[2] / 4] = ((reg[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & BYTEMASK) << 8;
-         else if (addr == 2)
-            mem[nextInstruction[2] / 4] = ((reg[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & BYTEMASK) << 16;
-         else if (addr == 3)
-            mem[nextInstruction[2] / 4] = ((reg[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & BYTEMASK) << 24;
-         clockCount += 5;
-         break;
-      case 0x29: //store halfword
-         addr = mem[reg[nextInstruction[1]] + nextInstruction[3]] % 4;
-         if (addr == 0)
-            mem[nextInstruction[2] / 4] = (reg[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & BYTEMASK;
-         else if (addr == 2)
-            mem[nextInstruction[2] / 4] = ((reg[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & BYTEMASK) << 16;
-         clockCount += 5;
+         res = (unsigned int)rs < (unsigned int)immVal;
          break;
       case 0x2B: //store word
-         mem[nextInstruction[2] / 4] = (reg[reg[nextInstruction[1]] + nextInstruction[3]] / 4) & BYTEMASK;
-         clockCount += 5;
+         res = rs + immVal;
          break;
     }
+   
+   return res;
 }
 
 /* Sub routine of execute to handle register-type instructions */
-void exReg()
+int exReg(int rs, int rt, int shamt, int func)
 {
-   unsigned int rs = nextInstruction[1];
-   unsigned int rt = nextInstruction[2];
-   unsigned int rd = nextInstruction[3]; 
-   unsigned int shamt = nextInstruction[4];  
-   unsigned int func = nextInstruction[5];
    int signedVal1 = 0;
    int signedVal2 = 0;
    unsigned int unsignedVal1 = 0;
    unsigned int unsignedVal2 = 0;
+   int res;
 
    switch(func) 
    {
       case 0x00 : 	// sll
-         reg[rd] = (reg[rt] << shamt);
-         PC += 4; 
+         res = rt << shamt;
          break;
       case 0x02 : 	// srl
-      	 unsignedVal1 = (unsigned int) reg[rt];
-         reg[rd] = (unsignedVal1 >> shamt);
-         PC += 4;
+      	 unsignedVal1 = (unsigned int) rt;
+         res = unsignedVal1 >> shamt;
          break;
       case 0x03 : 	// sra
-         signedVal1 = (int) reg[rt];
-         reg[rd] = (signedVal1 >> shamt);
-         PC += 4;
+         signedVal1 = (int) rt;
+         res = signedVal1 >> shamt;
          break;
       case 0x04 : 	// sllv
-         reg[rd] = (reg[rt] << reg[rs]);
-         PC += 4;
+         res = rt << rs;
          break;
       case 0x06 : 	// srlv
-         reg[rd] = (reg[rt] >> reg[rs]);
-         PC += 4;
+         res = rt >> rs;
          break;
       case 0x07 : 	// srav
-         signedVal1 = (int) reg[rt];
-         reg[rd] = (signedVal1 >> reg[rs]);
-         PC += 4;
+         signedVal1 = (int) rt;
+         res = signedVal1 >> rs;
+         break;
+      case 0x20 : 	// add
+         signedVal1 = rs;
+         signedVal2 = rt;
+         res = signedVal1 + signedVal2;
+         break;
+      case 0x21 : 	// addu
+         res = (unsigned int)rs + (unsigned int)rt;
+         break;
+      case 0x22 : 	// sub
+         signedVal1 = rs;
+         signedVal2 = rt;
+         res = signedVal1 - signedVal2;
+         break;
+      case 0x23 : 	// subu
+         res = (unsigned int)rs - (unsigned int)rt;
+         break;
+      case 0x24 : 	// and
+         res = rs & rt;
+         break;
+      case 0x25 : 	// or
+         res = rs | rt;
+         break;
+      case 0x26 : 	// Xor
+         res = rs ^ rt;
+         break;
+      case 0x27 : 	// Nor
+         res = ~(rs | rt);
+         break;
+      case 0x2A : 	// slt
+         signedVal1 = (int) rs;
+         signedVal2 = (int) rt;
+         res = (signedVal1 < signedVal2);
+         break;
+      case 0x2B : 	// sltu
+         res = (unsigned int)rs < (unsigned int)rt;
          break;
       case 0x08 : 	// jr
-         PC = reg[rs];
+         PC = rs;
          break;
       case 0x09 : 	// jalr
          reg[31] = PC + 4;
-         PC = reg[rs];
-         break;
-      case 0x20 : 	// add
-         signedVal1 = (int) reg[rs];
-         signedVal2 = (int) reg[rt];
-         reg[rd] = signedVal1 + signedVal2;
-         PC += 4;
-         break;
-      case 0x21 : 	// addu
-         reg[rd] = reg[rs] + reg[rt];
-         PC += 4;
-         break;
-      case 0x22 : 	// sub
-         signedVal1 = (int) reg[rs];
-         signedVal2 = (int) reg[rt];
-         reg[rd] = signedVal1 - signedVal2;
-         PC += 4;
-         break;
-      case 0x23 : 	// subu
-         reg[rd] = (reg[rs] - reg[rt]);
-         PC += 4;
-         break;
-      case 0x24 : 	// and
-         reg[rd] = (reg[rs] & reg[rt]);
-         PC += 4;
-         break;
-      case 0x25 : 	// or
-         reg[rd] = (reg[rs] | reg[rt]);
-         PC += 4;
-         break;
-      case 0x26 : 	// Xor
-         reg[rd] = (reg[rs] ^ reg[rt]);
-         PC += 4;
-         break;
-      case 0x27 : 	// Nor
-         reg[rd] = ~(reg[rs] | reg[rt]);
-         PC += 4;
-         break;
-      case 0x2A : 	// slt
-         signedVal1 = (int) reg[rs];
-         signedVal2 = (int) reg[rt];
-         reg[rd] = (signedVal1 < signedVal2);
-         PC += 4;
-         break;
-      case 0x2B : 	// sltu
-         reg[rd] = (reg[rs] < reg[rt]);
-         PC += 4;
+         PC = rs;
          break;
    }
-   clockCount += 4;
+   
+   return res;
+}
+
+void exBr(int op, int rs, int rt, int brAdd) {
+   switch (op) {
+      case 0x04: //branch equal
+         if (rs == rt)
+            PC = brAdd;
+         break;
+      case 0x05: //branch not equal
+         if (rs != rt)
+            PC = brAdd;
+         break;
+   }
+}
+
+int exLw(int rs, int immVal) {
+   int res;
+   
+   res = rs + immVal;
+   return res;
+}
+
+/* Takes the location in memory of the next instruction as an argument.
+ *
+ *  Modifies the nextInstruction buffer with details about the next Instruction
+ *
+ *  If it detects a syscall halt, it only puts -1 in first spot of buffer  -MB*/
+
+void exJmp(int op, int jmpAdd) {
+   if (op == 0x02) {
+      //J
+      
+      PC = (PC & 0xF0000000) | jmpAdd;
+   }
+   else {
+      //Jal
+      
+      reg[31] = PC;
+      PC = (PC & 0xF0000000) | jmpAdd;
+   }
 }
 
 void writeBack() {
