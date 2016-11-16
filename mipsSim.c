@@ -394,7 +394,7 @@ int main(int argc, char **argv) {
    int ifOut = 0; /* 64 bit instruction */
    int idOut[] = {0, 0, 0, 0, 0, 0, 0, 0}; /* format: { op, rs, rt, rd, imm, shamt, jmpIdx, func } */
    int exOut[] = {0, 0}; /* format: { rd, ALUResult } */
-   int memOut[] = {0, 0}; /* format: {} */
+   int memOut[] = {0, 0}; /* format: { rd, MDR } */
    int ifFlag, idFlag, exFlag, memFlag, wbFlag;
    int type, brAddress;
 
