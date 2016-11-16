@@ -33,6 +33,12 @@
 #define HALFMASK 0x0000FFFF // for half words
 #define SHALFMASK 0xFFFF0000
 
+#define REG 0
+#define IMM 1
+#define JMP 2
+#define BR 3
+#define LW 4
+
 typedef unsigned int MIPS, *MIPS_PTR;
 
 MB_HDR mb_hdr;		/* Header area */
@@ -81,42 +87,6 @@ int loadMemory(char *filename)	//This function acts as step 1 of lab 5, and load
 *  Modifies the nextInstruction buffer with details about the next Instruction
 *  
 *  If it detects a syscall halt, it only puts -1 in first spot of buffer  -MB*/
-unsigned int *fetch(int memLoc) {
-	unsigned int instr = mem[memLoc/4], opCode;
-	int count;
-
-	for (count = 0; count < 6; count++) {	/* Clear out nextInstruction buffer */
-		nextInstruction[count] = 0;
-	}
-	opCode = (instr & OPMASK) >> 26;
-	nextInstruction[0] = opCode;
-
-	if ((instr & SYMASK) == 0 && reg[2] == 10) {
-		//Syscall HALT
-		nextInstruction[0] = -1;
-	}
-	else if (opCode == 0) {
-		//Register
-		nextInstruction[1] = (instr & RSMASK) >> 21;
-		nextInstruction[2] = (instr & RTMASK) >> 16;
-		nextInstruction[3] = (instr & RDMASK) >> 11;
-		nextInstruction[4] = (instr & SHMASK) >> 6;
-		nextInstruction[5] = (instr & FNMASK);
-	}
-	else if (opCode == 0x02 || opCode == 0x03) {
-		//Jump
-		nextInstruction[1] = (instr & JIMASK);
-	}
-	else {
-		//Immediate
-		nextInstruction[1] = (instr & RSMASK) >> 21;
-		nextInstruction[2] = (instr & RTMASK) >> 16;
-		nextInstruction[3] = (instr & IMMASK);
-		if (instr & 0x00008000) {
-			nextInstruction[3] |= 0xFFFF0000;
-		}
-	}
-}
 
 void exJump() {
 	if (nextInstruction[0] == 0x02) {
@@ -359,27 +329,6 @@ void exReg()
    clockCount += 4;
 }
 
-int execute() {
-	if (nextInstruction[0] == -1) {
-		return -1;
-	}
-	else if (nextInstruction[0] == 0) {
-		exReg();
-	}
-	else if (nextInstruction[0] == 0x02 || nextInstruction[0] == 0x03) {
-		exJump();
-	}
-	else {
-		exImm();
-	}
-	return 0;
-
-	// for (count = 0; count < 6; count++) {
-	// 	printf("nextInstruction[%d]: %08X\n", count, nextInstruction[count]);
-	// }
-	// printf("\n");
-}
-
 void writeBack() {
 
 }
@@ -388,8 +337,57 @@ void memRef() {
 
 }
 
-void decode() {
+void execute(int *idOut, int *exOut, int *type, int *A, int *B, int *ALUOut)
+{
+   
+}
 
+void decode(int *ifOut, int *idOut, int *type, int *A, int *B, int *ALUOut) {
+   int imm = (*ifOut & IMMASK);
+   int op = (*ifOut & OPMASK);
+
+   if ((*ifOut & 0x00008000)) /* check the sign bit */
+   {
+      imm |= 0xFFFF0000;
+   }
+
+   /* Determine the instruction type */
+   switch (op)
+   {
+      case 0x0:
+         *type = REG;
+         break;
+      case 0x2:
+         *type = JMP;
+         break;
+      case 0x3:
+         *type = JMP;
+         break;
+      case 0x4:
+         *type = BR;
+         break;
+      case 0x5:
+         *type = BR;
+         break;
+      case 0x23:
+         *type = LW;
+         break;
+      default:
+         *type = IMM;
+         break;
+   }
+
+   *A = (*ifOut & RSMASK);
+   *B = (*ifOut & RTMASK);
+
+   /* ALUOut gets branch eff address */
+   *ALUOut = PC + (imm << 2); 
+}
+
+void fetch(int *ifOut)
+{
+   *ifOut = mem[PC/4];
+   PC = PC + 4;
 }
 
 void displayResult() {
@@ -403,6 +401,7 @@ int main(int argc, char **argv) {
    int exOut, exFlag;
    int memOut, memFlag;
    int wbFlag;
+   int type, A, B, ALUOut;
 
 	nextInstruction = calloc(6, sizeof(int));
 	PC = 0;
@@ -413,9 +412,9 @@ int main(int argc, char **argv) {
 	do {
 		writeBack();
 		memRef();
-		execute();
-		decode();
-		fetch(PC);
+		execute(&idOut, &exOut, &type, &A, &B, &ALUOut);
+		decode(&ifOut, &idOut, &type, &A, &B, &ALUOut);
+		fetch(&ifOut);
 	} while (exitFlag == 0);
 
 	// for (i = 0; i < memp; i += 4) {
