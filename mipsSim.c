@@ -51,7 +51,7 @@ typedef unsigned int MIPS, *MIPS_PTR;
 MB_HDR mb_hdr;		/* Header area */
 static MIPS mem[1024];		/* Room for 4K bytes */
 static unsigned int PC;
-static int reg[32];
+static int reg[32], numInstr;
 static float clockCount;
 
 
@@ -255,7 +255,7 @@ void exJmp(int op, int jmpAdd) {
 
 void writeBack(int *memOut) {
    reg[memOut[0]] = memOut[1];
-   clockCount++;
+   numInstr++;
 }
 
 void memRef(int *exOut, int *memOut, int type) 
@@ -264,15 +264,16 @@ void memRef(int *exOut, int *memOut, int type)
    if (type == LW)
    {
        memOut[0] = exOut[0];
-       memOut[1] = mem[(exOut[1]/4)];
+       memOut[1] = mem[(exOut[1]) / 4];
        memOut[2] = 1;
    }
    else if (type == SW)
    {
       memOut[0] = 0;
       memOut[1] = 0;
-      mem[(exOut[1]/4)] = reg[(exOut[0])];
+      mem[(exOut[1]) / 4] = reg[(exOut[0])];
       memOut[2] = 0;
+      numInstr++;
    }
    else
    {
@@ -280,13 +281,13 @@ void memRef(int *exOut, int *memOut, int type)
       memOut[1] = 0;
       reg[exOut[0]] = exOut[1];
       memOut[2] = 0;
+      numInstr++;
    }
-   clockCount++;
 }
 
 void execute(int *idOut, int *exOut, int type, int *brAddress)
 {
-   /* exOut format: { rd, ALUresult, bitFLag } */
+   /* exOut format: { rd, ALUresult, flagBit } */
    int result, temp;
 
    /* FORMAT: {op(0), rs(1), rt(2), rd(3), imm(4), shamt(5), jmpIdx(6), func(7)} */
@@ -318,6 +319,7 @@ void execute(int *idOut, int *exOut, int type, int *brAddress)
          result = 0;
          exOut[2] = CLEAR;
          exJmp(idOut[0], idOut[6]);
+         numInstr++;
          break;
       case BR:
          if (exBr(idOut[0], idOut[1], idOut[2], *brAddress) == CLEAR) {
@@ -325,6 +327,7 @@ void execute(int *idOut, int *exOut, int type, int *brAddress)
             result = 0;
             exOut[2] = CLEAR;
          }
+         numInstr++;
          break;
       case LW:
          result = exLSW(idOut[1], idOut[4]);
@@ -340,7 +343,6 @@ void execute(int *idOut, int *exOut, int type, int *brAddress)
 
    /* NEED TO DO: READY ARRAY FOR OUTPUT */
    exOut[1] = result;
-   clockCount++;
 }
 
 void decode(int *ifOut, int *idOut, int *type, int *brAddress) {
@@ -398,7 +400,7 @@ void decode(int *ifOut, int *idOut, int *type, int *brAddress) {
    /* ALUOut gets branch eff address */
    *brAddress = PC + (imm << 2);
 
-   /* set idOut to the output array; format: { op, rs, rt, rd, imm, shamt, jmpIdx, func } */
+   /* set idOut to the output array; format: { op, rs, rt, rd, imm, shamt, jmpIdx, func, flagBit} */
    idOut[0] = op;
    idOut[1] = rs;
    idOut[2] = rt;
@@ -408,14 +410,12 @@ void decode(int *ifOut, int *idOut, int *type, int *brAddress) {
    idOut[6] = jmpIdx;
    idOut[7] = func;
    
-   clockCount++;
 }
 
 void fetch(int *ifOut)
 {
    ifOut[0] = mem[PC/4];
    PC = PC + 4;
-   clockCount++;
 }
 
 void displayResult() {
@@ -426,6 +426,8 @@ void displayResult() {
       printf("R%d = %08X\n", count, reg[count]);
    }
    printf("PC: %08X\n", PC);
+   printf("Total Clock Cyces: %0.2f\n", clockCount);
+   printf("Number of Instructions completed: %d\n", numInstr);
    
 }
 
@@ -476,14 +478,16 @@ int main(int argc, char **argv) {
         }
         if (ifOut[1] != HALT) {
         	fetch(ifOut);
-                if (ifOut[0] == 0)
-                {
-                   ifOut[1] = 0;
-                }
-                else 
-                {
-        	   ifOut[1] = 1;
-                }
+            ifOut[1] = 1;
+                // if (ifOut[0] == 0)
+                // {
+                //    ifOut[1] = 0;
+                //    printf("FUUUUUUUCK\n");
+                // }
+                // else 
+                // {
+        	       // ifOut[1] = 1;
+                // }
         }
         else {
             exitFlag++;
@@ -493,6 +497,7 @@ int main(int argc, char **argv) {
             printf("Enter 0 for Run or 1 for Single-step: ");
             scanf("%02d", &input);
         }
+        clockCount++;
 	} while (exitFlag < 4);
 
 	// for (i = 0; i < memp; i += 4) {

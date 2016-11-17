@@ -13,6 +13,7 @@ main:	ori	$t0, $zero, 6		# number of entries in list
 	andi	$t1, $zero, 0
 loop:	lw	$t3, 0($t2)		# get a value from list
         nop
+        nop
 	add	$t1, $t3, $t1
 	addi	$t0, $t0, -1		# decrement counter
 	addi	$t2, $t2, 4		# advance pointer
