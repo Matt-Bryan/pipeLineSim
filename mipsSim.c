@@ -476,7 +476,14 @@ int main(int argc, char **argv) {
         }
         if (ifOut[1] != HALT) {
         	fetch(ifOut);
-        	ifOut[1] = 1;
+                if (ifOut[0] == 0)
+                {
+                   ifOut[1] = 0;
+                }
+                else 
+                {
+        	   ifOut[1] = 1;
+                }
         }
         else {
             exitFlag++;
