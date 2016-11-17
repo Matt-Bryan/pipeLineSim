@@ -120,7 +120,7 @@ int exImm(int rs, int op, int immVal) {
          res = reg[rs] + immVal;
          break;
       case 0x0F: //lui
-         res = reg[rs] << 16;
+         res = immVal << 16;
          break;
     }
    
@@ -150,10 +150,10 @@ int exReg(int rs, int rt, int shamt, int func)
          res = signedVal1 >> shamt;
          break;
       case 0x04 : 	// sllv
-         res = reg[rt] << rs;
+         res = reg[rt] << reg[rs];
          break;
       case 0x06 : 	// srlv
-         res = reg[rt] >> rs;
+         res = reg[rt] >> reg[rs];
          break;
       case 0x07 : 	// srav
          signedVal1 = (int) reg[rt];
@@ -197,11 +197,11 @@ int exReg(int rs, int rt, int shamt, int func)
          break;
       case 0x08 : 	// jr
          PC = reg[rs];
-         break;
+         return CLEAR;
       case 0x09 : 	// jalr
          reg[31] = PC;
          PC = reg[rs];
-         break;
+         return CLEAR;
    }
    
    return res;
@@ -210,14 +210,14 @@ int exReg(int rs, int rt, int shamt, int func)
 int exBr(int op, int rs, int rt, int brAdd) {
    switch (op) {
       case 0x04: //branch equal
-         if (rs == rt)
+         if (reg[rs] == reg[rt])
          {
             PC = brAdd;
             return CLEAR;
          }
          break;
       case 0x05: //branch not equal
-         if (rs != rt)
+         if (reg[rs] != reg[rt])
          {
             PC = brAdd;
             return CLEAR;
@@ -248,43 +248,46 @@ void exJmp(int op, int jmpAdd) {
    else {
       //Jal
       
-      reg[31] = PC;
+      reg[31] = PC - 4;
       PC = (PC & 0xF0000000) | jmpAdd;
    }
 }
 
 void writeBack(int *memOut) {
    reg[memOut[0]] = memOut[1];
-   clockCOunt++;
+   clockCount++;
 }
 
 void memRef(int *exOut, int *memOut, int type) 
 {
-   /* memOut format: { rd, MDR } */
+   /* memOut format: { rd, MDR, flagBit } */
    if (type == LW)
    {
        memOut[0] = exOut[0];
        memOut[1] = mem[(exOut[1]/4)];
+       memOut[2] = 1;
    }
    else if (type == SW)
    {
       memOut[0] = 0;
       memOut[1] = 0;
       mem[(exOut[1]/4)] = reg[(exOut[0])];
+      memOut[2] = 0;
    }
    else
    {
       memOut[0] = 0;
       memOut[1] = 0;
       reg[exOut[0]] = exOut[1];
+      memOut[2] = 0;
    }
    clockCount++;
 }
 
 void execute(int *idOut, int *exOut, int type, int *brAddress)
 {
-   /* exOut format: { rd, ALUresult } */
-   int result;
+   /* exOut format: { rd, ALUresult, bitFLag } */
+   int result, temp;
 
    /* FORMAT: {op(0), rs(1), rt(2), rd(3), imm(4), shamt(5), jmpIdx(6), func(7)} */
    switch(type)
@@ -294,27 +297,44 @@ void execute(int *idOut, int *exOut, int type, int *brAddress)
          exOut[0] = HALT;
          break;
       case REG:
-         result = exReg(idOut[1], idOut[2], idOut[5], idOut[7]);
-         exOut[0] = idOut[3];
+         temp = exReg(idOut[1], idOut[2], idOut[5], idOut[7]);
+         if (temp == CLEAR) {
+            exOut[0] = 0;
+            result = 0;
+            exOut[2] = CLEAR;
+         }
+         else {
+            result = temp;
+            exOut[0] = idOut[3];
+            exOut[2] = 1;
+         }
          break;
       case IMM:
          result = exImm(idOut[1], idOut[0], idOut[4]);
          exOut[0] = idOut[2];
+         exOut[2] = 1;
          break;
       case JMP:
-         result = CLEAR;
+         result = 0;
+         exOut[2] = CLEAR;
          exJmp(idOut[0], idOut[6]);
          break;
       case BR:
-         result = exBr(idOut[0], idOut[1], idOut[2], *brAddress);
+         if (exBr(idOut[0], idOut[1], idOut[2], *brAddress) == CLEAR) {
+            exOut[0] = 0;
+            result = 0;
+            exOut[2] = CLEAR;
+         }
          break;
       case LW:
          result = exLSW(idOut[1], idOut[4]);
          exOut[0] = idOut[2];
+         exOut[2] = 1;
          break;
       case SW:
          result = exLSW(idOut[1], idOut[4]);
          exOut[0] = idOut[2];
+         exOut[2] = 1;
          break;
    }
 
@@ -325,17 +345,19 @@ void execute(int *idOut, int *exOut, int type, int *brAddress)
 
 void decode(int *ifOut, int *idOut, int *type, int *brAddress) {
    int output[] = {0, 0, 0, 0, 0, 0, 0, 0}; /* format: {op, rs, rt, rd, imm, shamt, jmpIdx, func} */
-   int op = (*ifOut & OPMASK) >> 26;
-   int imm = (*ifOut & IMMASK);
-   int shamt = (*ifOut & SHMASK) >> 6;
-   int func = (*ifOut & FNMASK);
-   int jmpIdx = (*ifOut & JIMASK) << 2;
+   int op = (ifOut[0] & OPMASK) >> 26;
+   int imm = (ifOut[0] & IMMASK);
+   int shamt = (ifOut[0] & SHMASK) >> 6;
+   int func = (ifOut[0] & FNMASK);
+   int jmpIdx = (ifOut[0] & JIMASK) << 2;
 
-   int rs = (*ifOut & RSMASK) >> 21;
-   int rt = (*ifOut & RTMASK) >> 16;
-   int rd = (*ifOut & RDMASK) >> 11;
- 
-   if ((*ifOut & 0x00008000)) /* check the sign bit */
+   int rs = (ifOut[0] & RSMASK) >> 21;
+   int rt = (ifOut[0] & RTMASK) >> 16;
+   int rd = (ifOut[0] & RDMASK) >> 11;
+
+
+
+   if ((ifOut[0] & 0x00008000)) /* check the sign bit */
    {
       imm |= 0xFFFF0000;
    }
@@ -344,8 +366,10 @@ void decode(int *ifOut, int *idOut, int *type, int *brAddress) {
    switch (op)
    {
       case 0x0:
-         if (func == 0xC)
+         if (func == 0xC) {
             *type = HALT;
+            ifOut[1] = HALT;
+         }
          else
             *type = REG;
          break;
@@ -390,9 +414,9 @@ void decode(int *ifOut, int *idOut, int *type, int *brAddress) {
 
 void fetch(int *ifOut)
 {
-   *ifOut = mem[PC/4];
+   ifOut[0] = mem[PC/4];
    PC = PC + 4;
-   clockCOunt++;
+   clockCount++;
 }
 
 void displayResult() {
@@ -402,16 +426,16 @@ void displayResult() {
    {
       printf("R%d = %08X\n", count, reg[count]);
    }
+   printf("PC: %08X\n", PC);
    
 }
 
 int main(int argc, char **argv) {
 	int memp, input = 0, numInstr = 0, exitFlag = 0;
-   int ifOut = 0; /* 64 bit instruction */
-   int idOut[] = {0, 0, 0, 0, 0, 0, 0, 0}; /* format: { op, rs, rt, rd, imm, shamt, jmpIdx, func } */
-   int exOut[] = {0, 0}; /* format: { rd, ALUResult } */
-   int memOut[] = {0, 0}; /* format: {} */
-   int ifFlag, idFlag, exFlag, memFlag, wbFlag;
+   int ifOut[] = {0, 0}; /* format: {32 bit instruction, flagBit}*/		/* flagBit format: 0 = DIDNT RUN, 1 = RAN */
+   int idOut[] = {0, 0, 0, 0, 0, 0, 0, 0, 0}; /* format: { op, rs, rt, rd, imm, shamt, jmpIdx, func, flagBit } */
+   int exOut[] = {0, 0, 0}; /* format: { rd, ALUResult, flagBit } */
+   int memOut[] = {0, 0, 0}; /* format: {rd, MDR, flagBit} */
    int type, brAddress;
 
 	PC = 0;
@@ -419,19 +443,51 @@ int main(int argc, char **argv) {
 
 	memp = loadMemory(argv[1]);
 
+    printf("Enter 0 for Run or 1 for Single-step: ");
+    scanf("%02d", &input);
+
 	do {
- 		writeBack(memOut);
-		memRef(exOut, memOut, type);
-		execute(idOut, exOut, type, &brAddress);
-                if (exOut[1] == CLEAR)
-                {
-                   /* Clearing involves flushing in/outboxes and setting idFlag to busy */
-                   ifOut = 0;
-                   idFlag = EMPTY;
-                }
-		decode(&ifOut, idOut, &type, &brAddress);
-		fetch(&ifOut);
-	} while (exitFlag == 0);
+		if (memOut[2] == 1) {
+			writeBack(memOut);
+		}
+ 		if (exOut[2] == 1) {
+ 			memRef(exOut, memOut, type);
+ 		}
+        else {
+            memOut[2] = 0;
+        }
+		if (idOut[8] == 1) {
+			execute(idOut, exOut, type, &brAddress);
+		}
+        else {
+            exOut[2] = 0;
+        }
+        if (exOut[2] == CLEAR)
+        {
+            /* Clearing involves flushing in/outboxes and setting idFlag to busy */
+            ifOut[0] = 0;
+            ifOut[1] = 0;
+        }
+        if (ifOut[1] == 1) {
+        	decode(ifOut, idOut, &type, &brAddress);
+        	idOut[8] = 1;
+        }
+        else {
+            idOut[8] = 0;
+        }
+        if (ifOut[1] != HALT) {
+        	fetch(ifOut);
+        	ifOut[1] = 1;
+        }
+        else {
+            exitFlag++;
+        }
+        if (input == 1 && exitFlag < 4) {
+            displayResult();
+            printf("Enter 0 for Run or 1 for Single-step: ");
+            scanf("%02d", &input);
+        }
+	} while (exitFlag < 4);
 
 	// for (i = 0; i < memp; i += 4) {
  //       printf("Instruction@%08X : %08X\n", i, mem[i/4]);
