@@ -426,8 +426,9 @@ void displayResult() {
       printf("R%d = %08X\n", count, reg[count]);
    }
    printf("PC: %08X\n", PC);
-   printf("Total Clock Cyces: %0.2f\n", clockCount);
+   printf("Total Clock Cycles: %0.2f\n", clockCount);
    printf("Number of Instructions completed: %d\n", numInstr);
+   printf("CPI: %0.2f\n", clockCount / numInstr);
    
 }
 
